@@ -1,0 +1,8 @@
+node_modules
+.env
+audio
+transcripts
+youtube_audio
+youtube_json
+youtube_pdf
+youtube_transcripts

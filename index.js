@@ -1,35 +1,81 @@
-// RAG --> Retrieval Augmented Generation
+import { generateTranscriptPDF } from "./runfullPipeline.js";
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { indexDocument } from "./rag.js";
+import { resolveUserQuery } from "./query.js";
 
-/*
+const app = express();
+dotenv.config();
 
-Problem Statement: Create a Chatbot as your girlfiend
+const PORT = process.env.PORT || 3000;
 
-- system configure / context --> behave as my girlfriend
+app.use(cors());
+app.use(express.json());
 
-- What my gf likes to wear?
-- What my gf likes to eat?
+// POST endpoint
+app.post("/generate-pdf", async (req, res) => {
+  const { channelUrl, noOfVideos } = req.body;
 
-==> It won't be able to answer these questions because it doesn't have any context about your girlfriend. It will halucinate and give random answers.
+  if (!channelUrl || !noOfVideos) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
 
-What is Hallucination?
+  if (isNaN(noOfVideos) || noOfVideos <= 0) {
+    return res.status(400).json({ error: "Invalid number of videos" });
+  }
 
-- It is a phenomenon where the model generates information that is not based on the input or context. Like even if you don't know the answer of a question in your exam, you will write something random -- In a hope to get marks. This is called hallucination in AI.
+  if (noOfVideos > 10) {
+    return res.status(400).json({ error: "Maximum number of videos is 10" });
+  }
 
-What is fine-tuning?
+  try {
+    const pdfPath = await generateTranscriptPDF({
+      channelUrl,
+      maxVideos: Number(noOfVideos),
+    });
 
-- Fine-tuning is the process of taking a pre-trained model and training it further on a specific dataset to make it more suitable for a particular task. In this case, you would fine-tune the model on a dataset that contains information about your girlfriend's preferences, interests, and personality traits
-so that it can generate more accurate and relevant responses.
+    return res.status(200).json({
+      message: "✅ PDF generated successfully",
+      pdfPath,
+    });
+  } catch (err) {
+    console.error("❌ Error generating PDF:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
--- But fine-tuning is not always the best solution because:
+app.get("/create-vectors", async (req, res) => {
+  try {
+    //vectorize & store
+    await indexDocument();
+    return res.status(200).json({
+      message: "✅ Vectors generated & stored successfully",
+      pdfPath,
+    });
+  } catch (error) {
+    console.error("Error while vectorization : ", error);
+    return res.status(500).json({ error: "Error while vectorization!" });
+  }
+});
 
-- It requires a lot of data about your girlfriend.
-- It requires a lot of computational resources.
-- It is time-consuming and expensive. (Uses a lot of Tokens which costs money)
+app.post("/query", async (req, res) => {
+  try {
+    const { userQuery } = req.body;
+    const response = await resolveUserQuery(userQuery);
 
-How to solve this problem?
+    return res.status(200).json({
+      message: response,
+    });
+  } catch (error) {
+    console.error("Error while querying the db :", error);
 
-- Use RAG (Retrieval Augmented Generation) to provide context to the model.
+    return res.status(500).json({
+      error: "Error while querying the db!",
+    });
+  }
+});
 
-
-
-*/
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+});
