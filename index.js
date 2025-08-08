@@ -4,6 +4,14 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { indexDocument } from "./rag.js";
 import { resolveUserQuery } from "./query.js";
+import fs from "fs";
+import path from "path";
+import yts from "yt-search"; // ✅ Replacing youtube-search-python
+
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 dotenv.config();
@@ -48,10 +56,33 @@ app.post("/generate-pdf", async (req, res) => {
 app.get("/create-vectors", async (req, res) => {
   try {
     //vectorize & store
+
     await indexDocument();
+
+    // Step 2: Read JSON file
+    const filePath = path.join(
+      __dirname,
+      "youtube_json",
+      "youtube_videodata.json"
+    );
+    const fileData = fs.readFileSync(filePath, "utf-8");
+    const jsonArray = JSON.parse(fileData);
+
+    const firstVideo = jsonArray[0];
+
+    // ✅ Use yt-search to get channel info
+    const result = await yts({ query: firstVideo.channelUrl, type: "channel" });
+
+    if (!result.channels.length) {
+      return res.status(404).json({ error: "Channel not found" });
+    }
+
+    const { name: title, image: icon } = result.channels[0];
+
     return res.status(200).json({
       message: "✅ Vectors generated & stored successfully",
-      pdfPath,
+      title,
+      icon,
     });
   } catch (error) {
     console.error("Error while vectorization : ", error);

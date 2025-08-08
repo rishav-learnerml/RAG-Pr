@@ -23,7 +23,8 @@
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.17.1",
     "readline-sync": "^1.4.10",
-    "youtube-transcript": "^1.2.1"
+    "youtube-transcript": "^1.2.1",
+    "yt-search": "^2.13.1"
   },
   "keywords": [],
   "author": "",

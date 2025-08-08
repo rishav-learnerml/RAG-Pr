@@ -96,16 +96,16 @@ async function transcribeWithWhisper(video) {
   try {
     console.log(`🧠 Transcribing: ${sanitized}`);
     execSync(
-      `whisper "${audioPath}" --model base --output_format txt --output_dir "${transcriptsDir}"`,
+      `whisper "${audioPath}" --model base --output_format srt --output_dir "${transcriptsDir}"`,
       { stdio: "inherit" }
     );
 
-    const transcriptPath = path.join(transcriptsDir, `${sanitized}.txt`);
+    const transcriptPath = path.join(transcriptsDir, `${sanitized}.srt`);
     if (!fs.existsSync(transcriptPath)) {
       throw new Error(`Transcript not found: ${transcriptPath}`);
     }
 
-    console.log(`✅ Transcribed: ${sanitized}.txt`);
+    console.log(`✅ Transcribed: ${sanitized}.srt`);
     return sanitized;
   } catch (err) {
     console.error(`❌ Failed for video: ${video.title}`, err.message || err);
@@ -121,7 +121,7 @@ function generatePDF(videos, outputPdfPath) {
   let addedCount = 0;
 
   videos.forEach((video, index) => {
-    const transcriptPath = path.join(transcriptsDir, `${video.sanitized}.txt`);
+    const transcriptPath = path.join(transcriptsDir, `${video.sanitized}.srt`);
     if (!fs.existsSync(transcriptPath)) {
       console.warn(`⚠️ Transcript missing for: ${video.title}`);
       return;
