@@ -85,31 +85,26 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { PineconeStore } from "@langchain/pinecone";
 import dotenv from "dotenv";
+import mongoose from "mongoose";
 import path from "path";
 import fs from "fs";
+import { ChannelModel } from "./index.js"; // Import the ChannelModel
 
 dotenv.config();
 
-// phase-1 -> Indexing
-
-/* 
-
-langchain has prebuilt functions to handle the vectorization and retrieval process
-
-langchain was originally built for python, but now it has a javascript version as well. That is langchain.js
-
-Embeddding models are used to convert text into vectors. These vectors are then stored in a vector database like Pinecone. we can use google gemini embedding model to convert the text into vectors. but we will use langchain.js to handle the vectorization and retrieval process.
-
-*/
-
-//load pdf to code
-
 export async function indexDocument() {
   const PDF_DIR = "./youtube_pdf";
+  const JSON_DIR = "./youtube_json";
 
   // Step 1: Automatically find the only PDF file in the folder
   const files = fs.readdirSync(PDF_DIR);
   const pdfFile = files.find((file) => file.toLowerCase().endsWith(".pdf"));
+
+  // Step 2: Automatically find the only JSON file in the folder
+  const jsonFiles = fs.readdirSync(JSON_DIR);
+  const jsonFile = jsonFiles.find((file) =>
+    file.toLowerCase().endsWith(".json")
+  );
 
   if (!pdfFile) {
     throw new Error("No PDF file found in youtube_pdf folder.");
@@ -120,43 +115,95 @@ export async function indexDocument() {
   const pdfLoader = new PDFLoader(PDF_PATH);
   const rawDocs = await pdfLoader.load();
 
-  console.log("PDF Loaded...");
+  if (!jsonFile) {
+    throw new Error("No JSON file found in youtube_json folder.");
+  }
 
-  const CHUNK_SIZE = 1000; // Size of each chunk
-  const CHUNK_OVERLAP = 200; // Overlap between chunks
+  const JSON_PATH = path.join(JSON_DIR, jsonFile);
+  console.log("📄 Found JSON:", jsonFile);
+  const jsonData = JSON.parse(fs.readFileSync(JSON_PATH, "utf-8"));
+  const instanceId = jsonData[0].channelUsername;
+
+  console.log("✅ PDF Loaded...");
 
   const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: CHUNK_SIZE,
-    chunkOverlap: CHUNK_OVERLAP,
+    chunkSize: 1000,
+    chunkOverlap: 200,
   });
-  // chunk the pdf into smaller chunks
   const chunkedDocs = await textSplitter.splitDocuments(rawDocs);
 
-  console.log("Chunking Done...");
+  console.log(`✂️ Chunked into ${chunkedDocs.length} parts...`);
 
-  // -------------- CHUNKING DONE --------------
-
-  // Now we can convert these chunks to vectors and store them in Pinecone
-
-  // convert the chunks to vectors
+  // Step 2: Configure embeddings
   const embeddings = new GoogleGenerativeAIEmbeddings({
     apiKey: process.env.GEMINI_API_KEY,
     model: "text-embedding-004",
   });
 
-  console.log("Embeddding Model Configured...");
-  // store the vectors in pinecone
-  const pinecone = new Pinecone();
-  const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX_NAME);
-
-  console.log("Pinecone Configured...");
-
-  //langchain (chunking,embedding, and storing in db  )
-
-  await PineconeStore.fromDocuments(chunkedDocs, embeddings, {
-    pineconeIndex,
-    maxConcurrency: 5, // vectorise and store by 5-5 each at a time (free tier has rate limiting)
+  // Step 3: Connect to Pinecone
+  const pinecone = new Pinecone({
+    apiKey: process.env.PINECONE_API_KEY,
   });
 
-  console.log("Data loaded successfully...");
+  const indexName = `tutor-chatbot-${instanceId}`.toLowerCase();
+
+  // Step 4: Create index if not exists
+  const existingIndexes = await pinecone.listIndexes();
+  if (!existingIndexes.indexes.find((idx) => idx.name === indexName)) {
+    console.log(`📦 Creating Pinecone index: ${indexName}`);
+    await pinecone.createIndex({
+      name: indexName,
+      dimension: 768, // match your embeddings
+      metric: "cosine",
+      spec: {
+        serverless: {
+          cloud: "aws",
+          region: "us-east-1",
+        },
+      },
+    });
+
+    // Wait for index to be ready
+    let ready = false;
+    while (!ready) {
+      const desc = await pinecone.describeIndex(indexName);
+      if (desc.status.ready) {
+        ready = true;
+        console.log("✅ Index ready!");
+      } else {
+        console.log("⏳ Waiting for index to be ready...");
+        await new Promise((res) => setTimeout(res, 3000));
+      }
+    }
+  } else {
+    console.log(`ℹ️ Index '${indexName}' already exists.`);
+  }
+
+  const pineconeIndex = pinecone.Index(indexName);
+
+  // Step 5: Store vectors
+  await PineconeStore.fromDocuments(chunkedDocs, embeddings, {
+    pineconeIndex,
+    maxConcurrency: 5,
+  });
+
+  console.log("🎯 Data loaded successfully into Pinecone!");
+
+  // store in a mongodb database - the channelinfo and the instanceId
+
+  // Save channelInfo to MongoDB (assuming you have a MongoDB connection set up)
+
+  const channelInfo = {
+    instanceId: instanceId,
+    channelData: jsonData[0],
+  };
+
+  // Save to MongoDB
+  await ChannelModel.findOneAndUpdate(
+    { instanceId: instanceId }, // if exists, update
+    channelInfo,
+    { upsert: true, new: true }
+  );
+
+  console.log("💾 Channel info saved to MongoDB");
 }

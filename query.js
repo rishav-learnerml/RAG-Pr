@@ -55,6 +55,8 @@ Given a response, check whether the text includes:
   "answer": "..." // original assistant response
 }
 
+- DO NOT append ansy special characters or markups in the json that ight break it
+
 📄 Assistant Response:
 """${response}"""
 `;
@@ -128,7 +130,7 @@ async function transformQuery(question) {
   return response.text;
 }
 
-export async function resolveUserQuery(rawuserquery) {
+export async function resolveUserQuery(rawuserquery, instanceId) {
   // enhance user query
 
   const userquery = await transformQuery(rawuserquery);
@@ -148,7 +150,9 @@ export async function resolveUserQuery(rawuserquery) {
 
   // configure & connect with pinecone db
   const pinecone = new Pinecone();
-  const pineconeIndex = pinecone.Index(process.env.PINECONE_INDEX_NAME);
+  const pineconeIndex = pinecone.Index(
+    `tutor-chatbot-${instanceId}`.toLowerCase()
+  );
 
   // query from pinecone
   const searchResults = await pineconeIndex.query({

@@ -7,7 +7,7 @@ import { resolveUserQuery } from "./query.js";
 import fs from "fs";
 import path from "path";
 import yts from "yt-search"; // ✅ Replacing youtube-search-python
-
+import mongoose from "mongoose"; // ✅ For MongoDB
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +20,14 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// ✅ MongoDB Schema & Model
+export const ChannelSchema = new mongoose.Schema({
+  instanceId: { type: String, required: true },
+  channelData: { type: Object, required: true },
+});
+
+export const ChannelModel = mongoose.model("Channel", ChannelSchema);
 
 // POST endpoint
 app.post("/generate-pdf", async (req, res) => {
@@ -92,8 +100,8 @@ app.get("/create-vectors", async (req, res) => {
 
 app.post("/query", async (req, res) => {
   try {
-    const { userQuery } = req.body;
-    const response = await resolveUserQuery(userQuery);
+    const { userQuery,instanceId } = req.body;
+    const response = await resolveUserQuery(userQuery,instanceId);
 
     return res.status(200).json({
       message: response,
@@ -107,6 +115,29 @@ app.post("/query", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+// ✅ History Endpoint - Returns all stored channels
+app.get("/history", async (req, res) => {
+  try {
+    const history = await ChannelModel.find().sort({ _id: -1 });
+    return res.status(200).json(history);
+  } catch (error) {
+    console.error("❌ Error fetching history:", error);
+    return res.status(500).json({ error: "Error fetching history" });
+  }
 });
+
+// ✅ MongoDB Connection
+mongoose
+  .connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => {
+    console.log("✅ MongoDB Connected");
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) =>
+    console.error("❌ MongoDB Connection Error: Backend Not Running!", err)
+  );
