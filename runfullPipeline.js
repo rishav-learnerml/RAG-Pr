@@ -76,12 +76,23 @@ async function transcribeWithWhisper(video) {
   const sanitized = sanitizeTitle(video.title, videoId);
   const audioOutputTemplate = path.join(audioDir, `${sanitized}.%(ext)s`);
 
-  // First download
-  execSync(
-    `yt-dlp -x --audio-format mp3 -o "${audioOutputTemplate}" https://www.youtube.com/watch?v=${video.id}`,
+  // Updated yt-dlp command with user-agent, no-check-certificate, slow requests etc
+  const ytDlpCmd =
+    `yt-dlp --no-check-certificate --no-warnings --rm-cache-dir --sleep-requests 5 ` +
+    `--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ` +
+    `(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36" -x --audio-format mp3 -o "${audioOutputTemplate}" ` +
+    `https://www.youtube.com/watch?v=${video.id}`;
 
-    { stdio: "inherit" }
-  );
+  try {
+    // First download
+    execSync(ytDlpCmd, { stdio: "inherit" });
+  } catch (err) {
+    console.error(
+      `❌ yt-dlp failed for video: ${sanitized}`,
+      err.message || err
+    );
+    return null;
+  }
 
   // Find actual downloaded audio file
   const audioFiles = glob.sync(path.join(audioDir, `${sanitized}.*`));
