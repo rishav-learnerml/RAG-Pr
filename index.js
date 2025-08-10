@@ -37,6 +37,7 @@ app.use("/api/auth", authRouter);
 
 // ✅ MongoDB Schema & Model
 export const ChannelSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   instanceId: { type: String, required: true },
   channelData: { type: Object, required: true },
 });
@@ -79,7 +80,7 @@ app.get("/create-vectors", requireAuth, async (req, res) => {
   try {
     //vectorize & store
 
-    await indexDocument();
+    await indexDocument(req.user.id);
 
     // Step 2: Read JSON file
     const filePath = path.join(
@@ -148,10 +149,14 @@ app.get("/channel-logo/:handle", requireAuth, async (req, res) => {
   }
 });
 
-// ✅ History Endpoint - Returns all stored channels
+// ✅ History Endpoint - Returns user-specific stored channels only
 app.get("/history", requireAuth, async (req, res) => {
   try {
-    const history = await ChannelModel.find().sort({ _id: -1 });
+    const userId = req.user.id; // Assuming requireAuth sets req.user
+
+    // Find channels only for the logged-in user
+    const history = await ChannelModel.find({ userId }).sort({ _id: -1 });
+
     return res.status(200).json(history);
   } catch (error) {
     console.error("❌ Error fetching history:", error);

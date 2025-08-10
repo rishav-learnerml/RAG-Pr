@@ -85,14 +85,13 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { PineconeStore } from "@langchain/pinecone";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
 import path from "path";
 import fs from "fs";
 import { ChannelModel } from "./index.js"; // Import the ChannelModel
 
 dotenv.config();
 
-export async function indexDocument() {
+export async function indexDocument(userId) {
   const PDF_DIR = "./youtube_pdf";
   const JSON_DIR = "./youtube_json";
 
@@ -145,7 +144,9 @@ export async function indexDocument() {
     apiKey: process.env.PINECONE_API_KEY,
   });
 
-  const indexName = `tutor-chatbot-${instanceId}`.toLowerCase().replaceAll('_','-');
+  const indexName = `tutor-chatbot-${instanceId}`
+    .toLowerCase()
+    .replaceAll("_", "-");
 
   // Step 4: Create index if not exists
   const existingIndexes = await pinecone.listIndexes();
@@ -194,13 +195,14 @@ export async function indexDocument() {
   // Save channelInfo to MongoDB (assuming you have a MongoDB connection set up)
 
   const channelInfo = {
+    userId,
     instanceId: instanceId,
     channelData: jsonData[0],
   };
 
   // Save to MongoDB
   await ChannelModel.findOneAndUpdate(
-    { instanceId: instanceId }, // if exists, update
+    { instanceId: instanceId, userId }, // include userId in query
     channelInfo,
     { upsert: true, new: true }
   );
