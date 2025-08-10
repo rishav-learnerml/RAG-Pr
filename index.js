@@ -170,8 +170,20 @@ app.post("/query", requireAuth, async (req, res) => {
 
     const textResponse = await resolveUserQuery(userQuery, instanceId);
 
-    // Hardcode the audio filename you want to use for voice cloning
-    const sampleAudioFile = "sample.mp3"; // replace with your actual mp3 filename in youtube_audio
+    // Step 1: Read first audio file from youtube_audio folder
+    const audioDir = path.join(__dirname, "youtube_audio");
+    const files = fs.readdirSync(audioDir).filter((file) => {
+      // Filter for mp3 files (or add wav if you want)
+      return file.toLowerCase().endsWith(".mp3");
+    });
+
+    if (files.length === 0) {
+      return res
+        .status(500)
+        .json({ error: "No audio file found in youtube_audio folder" });
+    }
+
+    const sampleAudioFile = files[0]; // take the first mp3 file
 
     // Step 1: Convert MP3 -> WAV (if not already done)
     let wavFilename;
@@ -183,7 +195,7 @@ app.post("/query", requireAuth, async (req, res) => {
     }
 
     // Step 2: Build the dataset URL for Resemble
-    const datasetUrl = `https://www.api.neotutor.swagcoder.in/audio/${wavFilename}`;
+    const datasetUrl = `https://www.api.neotutor.swagcoder.in/youtube_audio/${wavFilename}`;
 
     // Step 3: Create voice in Resemble AI
     let voice;
