@@ -1,5 +1,5 @@
 # Use official Node LTS image with Debian base
-FROM node:18-bullseye
+FROM node:20-bullseye
 
 # Install Python3, pip, and ffmpeg (required for yt-dlp and whisper)
 RUN apt-get update && apt-get install -y \
