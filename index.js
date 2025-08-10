@@ -14,6 +14,7 @@ import authRouter from "./routes/auth.js";
 import { requireAuth } from "./middleware/auth.js";
 import ffmpeg from "fluent-ffmpeg";
 import axios from "axios";
+import { VoiceModel } from "./models/Voice.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,13 +79,22 @@ async function createOrGetVoice(voiceName, datasetUrl) {
 
 async function synthesizeSpeech(voiceUuid, text) {
   const res = await axios.post(
-    `${RESEMBLE_API_URL}/voices/${voiceUuid}/speak`,
-    { text },
+    "https://f.cluster.resemble.ai/synthesize",
     {
-      headers: { Authorization: `Bearer ${RESEMBLE_API_KEY}` },
+      voice_uuid: voiceUuid,
+      data: text,
+      sample_rate: 48000,
+      output_format: "wav",
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${RESEMBLE_API_KEY}`,
+        "Content-Type": "application/json",
+        "Accept-Encoding": "gzip, deflate, br",
+      },
     }
   );
-  return res.data; // Contains speak_url (audio)
+  return res.data; // contains audio_content (base64)
 }
 
 // ✅ MongoDB Schema & Model
@@ -168,65 +178,87 @@ app.post("/query", requireAuth, async (req, res) => {
   try {
     const { userQuery, instanceId } = req.body;
 
+    if (!instanceId) {
+      return res.status(400).json({ error: "instanceId is required" });
+    }
+
+    // 1. Resolve text query
     const textResponse = await resolveUserQuery(userQuery, instanceId);
 
-    // Step 1: Read first audio file from youtube_audio folder
-    const audioDir = path.join(__dirname, "youtube_audio");
-    const files = fs.readdirSync(audioDir).filter((file) => {
-      // Filter for mp3 files (or add wav if you want)
-      return file.toLowerCase().endsWith(".mp3");
-    });
+    // 2. Look up voice in DB by instanceId
+    let voiceRecord = await VoiceModel.findOne({ instanceId });
 
-    if (files.length === 0) {
-      return res
-        .status(500)
-        .json({ error: "No audio file found in youtube_audio folder" });
-    }
+    if (!voiceRecord) {
+      // First time: create voice
 
-    const sampleAudioFile = files[0]; // take the first mp3 file
+      // Read first mp3 file
+      const audioDir = path.join(__dirname, "youtube_audio");
+      const files = fs
+        .readdirSync(audioDir)
+        .filter((file) => file.toLowerCase().endsWith(".mp3"));
 
-    // Step 1: Convert MP3 -> WAV (if not already done)
-    let wavFilename;
-    try {
-      wavFilename = await convertMp3ToWav(sampleAudioFile);
-    } catch (convErr) {
-      console.error("MP3->WAV conversion failed:", convErr);
-      return res.status(500).json({ error: "Audio conversion failed" });
-    }
+      if (files.length === 0) {
+        return res
+          .status(500)
+          .json({ error: "No audio file found in youtube_audio folder" });
+      }
 
-    // Step 2: Build the dataset URL for Resemble
-    const datasetUrl = `https://www.api.neotutor.swagcoder.in/youtube_audio/${wavFilename}`;
+      const sampleAudioFile = files[0];
 
-    // Step 3: Create voice in Resemble AI
-    let voice;
-    try {
-      voice = await createOrGetVoice("Neotutor Custom Voice", datasetUrl);
-    } catch (voiceErr) {
-      console.error("Voice creation failed:", voiceErr);
-      return res.status(500).json({ error: "Voice creation failed" });
-    }
+      // Convert to WAV
+      let wavFilename;
+      try {
+        wavFilename = await convertMp3ToWav(sampleAudioFile);
+      } catch (convErr) {
+        console.error("MP3->WAV conversion failed:", convErr);
+        return res.status(500).json({ error: "Audio conversion failed" });
+      }
 
-    if (voice.status !== "ready") {
-      // Voice training in progress
+      const datasetUrl = `https://api.neotutor.swagcoder.in/youtube_audio/${wavFilename}`;
+
+      let voice;
+      try {
+        voice = await createOrGetVoice("Neotutor Custom Voice", datasetUrl);
+      } catch (voiceErr) {
+        console.error("Voice creation failed:", voiceErr);
+        return res.status(500).json({ error: "Voice creation failed" });
+      }
+
+      // Save voice info to DB
+      voiceRecord = new VoiceModel({
+        instanceId,
+        voiceUuid: voice.uuid,
+        status: voice.status,
+      });
+      await voiceRecord.save();
+
+      if (voice.status !== "ready") {
+        return res.status(202).json({
+          message: textResponse,
+          info: "Voice training in progress, please try again shortly.",
+        });
+      }
+    } else if (voiceRecord.status !== "ready") {
+      // Voice exists but training still in progress
       return res.status(202).json({
         message: textResponse,
         info: "Voice training in progress, please try again shortly.",
       });
     }
 
-    // Step 4: Generate speech audio for the text response
+    // 3. Voice is ready — synthesize speech
     let speechData;
     try {
-      speechData = await synthesizeSpeech(voice.uuid, textResponse);
+      speechData = await synthesizeSpeech(voiceRecord.voiceUuid, textResponse);
     } catch (synthErr) {
       console.error("Speech synthesis failed:", synthErr);
       return res.status(500).json({ error: "Speech synthesis failed" });
     }
 
-    // Step 5: Return text and audio URL to frontend
+    // 4. Return text and audio
     return res.status(200).json({
       text: textResponse,
-      audioUrl: speechData.speak_url,
+      audioBase64: speechData.audio_content,
     });
   } catch (error) {
     console.error("Error in /query:", error);
