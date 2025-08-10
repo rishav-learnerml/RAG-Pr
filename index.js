@@ -214,7 +214,7 @@ app.post("/query", requireAuth, async (req, res) => {
         return res.status(500).json({ error: "Audio conversion failed" });
       }
 
-      const datasetUrl = `https://api.neotutor.swagcoder.in/youtube_audio/${wavFilename}`;
+      const datasetUrl = `https://neotutorapi.swagcoder.in/youtube_audio/${wavFilename}`;
 
       let voice;
       try {
