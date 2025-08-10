@@ -37,8 +37,8 @@ router.post("/signup", async (req, res) => {
     // set cookie
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
-      sameSite: "lax", // or "strict" if desired
-      secure: process.env.NODE_ENV === "production",
+      sameSite: "none", // or "strict" if desired
+      secure: true,
       maxAge: 1000 * 60 * 60 * 24 * 7, // match JWT_EXPIRES_IN (7 days)
     });
 
@@ -65,9 +65,9 @@ router.post("/signin", async (req, res) => {
     const token = createToken({ id: user._id, name: user.name });
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 1000 * 60 * 60 * 24 * 7,
+      sameSite: "none", // or "strict" if desired
+      secure: true,
+      maxAge: 1000 * 60 * 60 * 24 * 7, // match JWT_EXPIRES_IN (7 days)
     });
 
     return res.json({ message: "Signed in", user: { id: user._id, name: user.name, githubUsername: user.githubUsername } });
@@ -81,8 +81,8 @@ router.post("/signin", async (req, res) => {
 router.post("/signout", (req, res) => {
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: "none",
+    secure: true,
   });
   return res.json({ message: "Signed out" });
 });
