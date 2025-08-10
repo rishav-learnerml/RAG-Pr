@@ -7,28 +7,29 @@ dotenv.config();
 const ai = new GoogleGenAI({});
 
 const History = [];
-
 function tryParseJSON(text) {
-  // First, attempt raw parsing without touching anything
+  if (!text || typeof text !== "string") return null;
+
+  // 1. Remove any markdown fences like ```json ... ```
+  let clean = text
+    .replace(/```(?:json)?/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  // 2. Try direct parse
   try {
-    return JSON.parse(text);
+    return JSON.parse(clean);
   } catch (_) {}
 
-  // If that fails, try to extract a clean JSON-like block
-  const jsonStart = text.indexOf("{");
-  const jsonEnd = text.lastIndexOf("}");
-  if (jsonStart === -1 || jsonEnd === -1 || jsonEnd <= jsonStart) {
-    return null;
+  // 3. Extract first {...} or [...] block
+  const match = clean.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch (_) {}
   }
 
-  const substring = text.slice(jsonStart, jsonEnd + 1);
-
-  try {
-    return JSON.parse(substring);
-  } catch (err2) {
-    console.error("❌ Still failed to parse JSON:", err2);
-    return null;
-  }
+  return null;
 }
 
 export async function structureResponse(response) {
@@ -107,7 +108,7 @@ Given a response, check whether the text includes:
     return { answer: parsed.text };
   }
 
-  return { answer: response.text };
+  return { answer: response };
 }
 
 async function transformQuery(question) {

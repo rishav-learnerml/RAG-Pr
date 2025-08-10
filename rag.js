@@ -145,7 +145,7 @@ export async function indexDocument() {
     apiKey: process.env.PINECONE_API_KEY,
   });
 
-  const indexName = `tutor-chatbot-${instanceId}`.toLowerCase();
+  const indexName = `tutor-chatbot-${instanceId}`.toLowerCase().replaceAll('_','-');
 
   // Step 4: Create index if not exists
   const existingIndexes = await pinecone.listIndexes();
